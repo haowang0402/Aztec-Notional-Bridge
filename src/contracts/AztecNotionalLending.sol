@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity ^0.8.0;
 
-import {BalanceActionWithTrades, DepositActionType, BalanceAction, TradeActionType, MarketParameters, AssetRateParameters} from "./contracts/global/NotionalTypes.sol";
+import {BalanceActionWithTrades, DepositActionType, BalanceAction, TradeActionType, MarketParameters, AssetRateParameters} from "./interfaces/NotionalTypes.sol";
 import {IDefiBridge} from "./interfaces/IDeFIBridge.sol";
-import { Types }  from "./library/Types.sol";
+import { Types }  from "./interfaces/Types.sol";
 import {NotionalProxy} from "./interfaces/notional/NotionalProxy.sol";
 import {NotionalViews} from "./interfaces/notional/NotionalViews.sol";
 import {CTokenInterface} from "./interfaces/compound/CTokenInterface.sol";

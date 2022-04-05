@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
-import "../../interfaces/chainlink/AggregatorV2V3Interface.sol";
-import "../../interfaces/notional/AssetRateAdapter.sol";
+import "./chainlink/AggregatorV2V3Interface.sol";
+import "./notional/AssetRateAdapter.sol";
 
 /// @notice Different types of internal tokens
 ///  - UnderlyingToken: underlying asset for a cToken (except for Ether)
