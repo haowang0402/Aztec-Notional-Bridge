@@ -31,198 +31,183 @@ contract ContractTest is DSTest {
         assert(index == 0);
         assert(b == false);
     }
-    // test whether when we lend eth, we receive wrapper fcash token back
-    function testLendETH() public{
-        NotionalLendingBridge bridge = new NotionalLendingBridge(address(this));
+
+
+    function lendETH(uint inputAmount) internal returns(NotionalLendingBridge bridge){
+        bridge = new NotionalLendingBridge(address(this));
         bridge.insertToken(IEIP20NonStandard(ETH),CTokenInterface(CETH));
         Types.AztecAsset memory inputAsset;
         inputAsset.assetType = Types.AztecAssetType.ETH;
-        vm.deal(address(this), 10 ether);
+        vm.deal(address(this), inputAmount + 1 ether);
         inputAsset.erc20Address = ETH;
-        uint inputValue = 0.01 ether;
         uint64 auxData = (1 << 48) + (1 << 40);
-        bridge.convert{value: 0.01 ether}(inputAsset,inputAsset,inputAsset, inputAsset, inputValue, 0, auxData);
-        address fcashToken = bridge.cashTokenFcashToken(0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5);
+        bridge.convert{value: inputAmount}(inputAsset,inputAsset,inputAsset, inputAsset, inputAmount, 0, auxData);
+    }
+
+
+    function withdrawETH(uint withdrawAmount, NotionalLendingBridge bridge, bool underlying) internal {
+        Types.AztecAsset memory inputAsset;
+        Types.AztecAsset memory outputAsset;
+        address fcashToken = bridge.cashTokenFcashToken(CETH);
+        inputAsset.assetType = Types.AztecAssetType.ERC20;
+        inputAsset.erc20Address = fcashToken;
+        if (underlying) {
+            outputAsset.assetType = Types.AztecAssetType.ETH;
+            outputAsset.erc20Address = ETH;
+        } else {
+            outputAsset.assetType = Types.AztecAssetType.ERC20;
+            outputAsset.erc20Address = CETH;
+        }
+        FCashToken(fcashToken).approve(address(bridge), withdrawAmount);
+        uint64 auxData = (1 << 48) + (1 << 40) + 1664064000;
+        bridge.convert(inputAsset,inputAsset,outputAsset,outputAsset, withdrawAmount, 0, auxData);
+    }
+
+    function lendCDAI(uint inputAmount) internal returns(NotionalLendingBridge bridge, uint inputCDAI){
+        bridge = new NotionalLendingBridge(address(this));
+        bridge.insertToken(IEIP20NonStandard(DAI),CTokenInterface(CDAI));
+        vm.deal(address(this), inputAmount);
+        Types.AztecAsset memory inputAsset;
+        // swap for CDai
+        address[] memory path = new address[](3);
+        path[0] = WETH;
+        path[1] = DAI;
+        path[2] = CDAI;
+        ROUTER.swapExactETHForTokens{value: inputAmount}(0, path, address(this), block.timestamp);
+        uint CDAIBalance = CTokenInterface(CDAI).balanceOf(address(this));
+        inputCDAI = CDAIBalance;
+        inputAsset.assetType = Types.AztecAssetType.ERC20;
+        inputAsset.erc20Address = CDAI;
+        uint inputValue = CDAIBalance;
+        uint64 auxData = (2 << 48) + (1 << 40);
+        CTokenInterface(CDAI).approve(address(bridge), CDAIBalance);
+        bridge.convert(inputAsset,inputAsset,inputAsset, inputAsset, inputValue, 0, auxData);
+    }
+
+
+    function withdrawCDAI(uint withdrawAmount, NotionalLendingBridge bridge, bool underlying) internal {
+        Types.AztecAsset memory inputAsset;
+        Types.AztecAsset memory outputAsset;
+        address fcashToken = bridge.cashTokenFcashToken(CDAI);
+        inputAsset.assetType = Types.AztecAssetType.ERC20;
+        inputAsset.erc20Address = fcashToken;
+        outputAsset.assetType = Types.AztecAssetType.ERC20;
+        if (underlying) {
+            outputAsset.erc20Address = address(DAI);
+        } else {
+            outputAsset.erc20Address = address(CDAI);
+        }
+        FCashToken(fcashToken).approve(address(bridge), withdrawAmount);
+        uint64 auxData = (2 << 48) + (1 << 40) + 1664064000;
+        bridge.convert(inputAsset,inputAsset,outputAsset,outputAsset, withdrawAmount, 0, auxData);
+    }
+    
+    function convertInput(uint x) internal pure returns (uint) {
+        x = 1e16 > x ? 1e16 : x;
+        x = 1e20 < x ? 1e20 : x;
+        return x;
+    }
+
+    // test whether when we lend eth, we receive wrapper fcash token back
+    function testLendETH(uint x) public{
+        x = convertInput(x);
+        NotionalLendingBridge bridge = lendETH(x);
+        address fcashToken = bridge.cashTokenFcashToken(CETH);
         uint balance = FCashToken(fcashToken).balanceOf(address(this));
         require(balance > 0, "receive fcash for lending");
     }
 
-    function testWithdrawETHUnderMaturity() public {
-        NotionalLendingBridge bridge = new NotionalLendingBridge(address(this));
-        bridge.insertToken(IEIP20NonStandard(ETH),CTokenInterface(CETH));
-        Types.AztecAsset memory inputAsset;
-        inputAsset.assetType = Types.AztecAssetType.ETH;
-        vm.deal(address(this), 10 ether);
-        inputAsset.erc20Address = address(0x0);
-        uint inputValue = 0.01 ether;
-        uint64 auxData = (1 << 48) + (1 << 40);
-        bridge.convert{value: 0.01 ether}(inputAsset,inputAsset,inputAsset, inputAsset, inputValue, 0, auxData);
-        address fcashToken = bridge.cashTokenFcashToken(CETH);
-        uint balance = FCashToken(fcashToken).balanceOf(address(this));
-        inputAsset.assetType = Types.AztecAssetType.ERC20;
-        inputAsset.erc20Address = fcashToken;
-        inputValue = balance;
-        Types.AztecAsset memory outputAsset;
-        outputAsset.assetType = Types.AztecAssetType.ETH;
-        outputAsset.erc20Address = ETH;
-        FCashToken(fcashToken).approve(address(bridge), balance);
-        auxData = (1 << 48) + (1 << 40) + 1664064000;
+    function testWithdrawETHUnderMaturity(uint x) public {
+        x = convertInput(x);
+        NotionalLendingBridge bridge = lendETH(x);
         uint prevBalance = address(this).balance;
-        bridge.convert(inputAsset,inputAsset,outputAsset,outputAsset, inputValue, 0, auxData);
+        uint withdrawAmount = IEIP20NonStandard(bridge.cashTokenFcashToken(CETH)).balanceOf(address(this));
+        withdrawETH(withdrawAmount, bridge,true);
         uint totalRedeemedETH = address(this).balance - prevBalance;
+        address fcashToken = bridge.cashTokenFcashToken(CETH);
         require(totalRedeemedETH * 10000 /0.01 ether > 9900, "should take most of the money back");
         require(FCashToken(fcashToken).balanceOf(address(this)) == 0, "fcash should be burned");
     }
 
-    function testWithdrawETHOverMaturity() public {
-        NotionalLendingBridge bridge = new NotionalLendingBridge(address(this));
-        bridge.insertToken(IEIP20NonStandard(ETH),CTokenInterface(CETH));
-        Types.AztecAsset memory inputAsset;
-        inputAsset.assetType = Types.AztecAssetType.ETH;
-        vm.deal(address(this), 10 ether);
-        inputAsset.erc20Address = ETH;
-        uint inputValue = 0.01 ether;
-        uint64 auxData = (1 << 48) + (1 << 40);
-        bridge.convert{value: 0.01 ether}(inputAsset,inputAsset,inputAsset, inputAsset, inputValue, 0, auxData);
-        address fcashToken = bridge.cashTokenFcashToken(CETH);
-        uint balance = FCashToken(fcashToken).balanceOf(address(this));
-        inputAsset.assetType = Types.AztecAssetType.ERC20;
-        inputAsset.erc20Address = fcashToken;
-        inputValue = balance;
-        Types.AztecAsset memory outputAsset;
-        outputAsset.assetType = Types.AztecAssetType.ETH;
-        outputAsset.erc20Address = ETH;
-        FCashToken(fcashToken).approve(address(bridge), balance);
-        auxData = auxData + 1664064000;
-        vm.warp(1679616000);
+    function testWithdrawETHOverMaturity(uint x) public {
+        x = convertInput(x);
+        NotionalLendingBridge bridge = lendETH(x);
+        uint withdrawAmount = IEIP20NonStandard(bridge.cashTokenFcashToken(CETH)).balanceOf(address(this));
         uint prevBalance = address(this).balance;
-        bridge.convert(inputAsset,inputAsset,outputAsset,outputAsset, inputValue, 0, auxData);
+        vm.warp(1679616000);
+        withdrawETH(withdrawAmount, bridge, true);
         uint totalRedeemedETH = address(this).balance - prevBalance;
-        require(totalRedeemedETH > inputValue, "should incur interest");
+        address fcashToken = bridge.cashTokenFcashToken(CETH);
+        require(totalRedeemedETH > x, "should incur interest");
         require(FCashToken(fcashToken).balanceOf(address(this)) == 0, "fcash should be burned");
     }
 
-
-    function testWithdrawETHOverMaturityWithdrawCETH() public {
-        NotionalLendingBridge bridge = new NotionalLendingBridge(address(this));
-        bridge.insertToken(IEIP20NonStandard(ETH),CTokenInterface(CETH));
-        Types.AztecAsset memory inputAsset;
-        inputAsset.assetType = Types.AztecAssetType.ETH;
-        vm.deal(address(this), 10 ether);
-        inputAsset.erc20Address = ETH;
-        uint inputValue = 0.01 ether;
-        uint64 auxData = (1 << 48) + (1 << 40);
-        bridge.convert{value: 0.01 ether}(inputAsset,inputAsset,inputAsset, inputAsset, inputValue, 0, auxData);
+    function testPartialWithdrawETHUnderMaturity(uint x) public {
+        x = convertInput(x);
+        NotionalLendingBridge bridge = lendETH(x);
+        uint prevBalance = address(this).balance;
+        uint withdrawAmount = IEIP20NonStandard(bridge.cashTokenFcashToken(CETH)).balanceOf(address(this));
+        withdrawETH(withdrawAmount/2, bridge,true);
+        uint totalRedeemedETH = address(this).balance - prevBalance;
         address fcashToken = bridge.cashTokenFcashToken(CETH);
-        uint balance = FCashToken(fcashToken).balanceOf(address(this));
-        inputAsset.assetType = Types.AztecAssetType.ERC20;
-        inputAsset.erc20Address = fcashToken;
-        inputValue = balance;
-        Types.AztecAsset memory outputAsset;
-        outputAsset.assetType = Types.AztecAssetType.ERC20;
-        outputAsset.erc20Address = CETH;
-        FCashToken(fcashToken).approve(address(bridge), balance);
-        auxData = auxData + 1664064000;
+        require(totalRedeemedETH * 10000 / (x/2) > 9900, "should take roughly 1/2 of the money back");
+        require(totalRedeemedETH * 10000 / x < 5000, "should not take all of the money back");
+        require(FCashToken(fcashToken).balanceOf(address(this)) == withdrawAmount - withdrawAmount/2, "half of the fcash should remain");
+    }
+
+    function testPartialWithdrawETHOverMaturity(uint x) public {
+        x = convertInput(x);
+        NotionalLendingBridge bridge = lendETH(x);
+        uint withdrawAmount = IEIP20NonStandard(bridge.cashTokenFcashToken(CETH)).balanceOf(address(this));
+        uint prevBalance = address(this).balance;
         vm.warp(1679616000);
-        bridge.convert(inputAsset,inputAsset,outputAsset,outputAsset, inputValue, 0, auxData);
+        withdrawETH(withdrawAmount/2, bridge, true);
+        uint totalRedeemedETH = address(this).balance - prevBalance;
+        address fcashToken = bridge.cashTokenFcashToken(CETH);
+        require(totalRedeemedETH > x/2, "should incur interest on the half of the withdraw amount");
+        require(totalRedeemedETH * 10000 / x < 6000, "should not take all of the money back");
+        require(FCashToken(fcashToken).balanceOf(address(this)) == withdrawAmount - withdrawAmount/2, "half of the fcash should remain");
+    }
+
+    function testWithdrawETHOverMaturityWithdrawCETH(uint x) public {
+        x = convertInput(x);
+        NotionalLendingBridge bridge = lendETH(x);
+        uint withdrawAmount = IEIP20NonStandard(bridge.cashTokenFcashToken(CETH)).balanceOf(address(this));
+        vm.warp(1679616000);
+        withdrawETH(withdrawAmount, bridge, false);
+        address fcashToken = bridge.cashTokenFcashToken(CETH);
         require(CTokenInterface(CETH).balanceOf(address(this)) > 0, "should receive CETH");
         require(FCashToken(fcashToken).balanceOf(address(this)) == 0, "fcash should be burned");
     }
 
-    function testLendCDAI() public{
-        NotionalLendingBridge bridge = new NotionalLendingBridge(address(this));
-        bridge.insertToken(IEIP20NonStandard(DAI),CTokenInterface(CDAI));
-        vm.deal(address(this), 10 ether);
-        Types.AztecAsset memory inputAsset;
-        // swap for CDai
-        address[] memory path = new address[](3);
-        path[0] = WETH;
-        path[1] = DAI;
-        path[2] = CDAI;
-        ROUTER.swapExactETHForTokens{value: 0.01 ether}(0, path, address(this), block.timestamp);
-        uint CDAIBalance = CTokenInterface(CDAI).balanceOf(address(this));
-        inputAsset.assetType = Types.AztecAssetType.ERC20;
-        inputAsset.erc20Address = CDAI;
-        uint inputValue = CDAIBalance;
-        uint64 auxData = (2 << 48) + (1 << 40);
-        CTokenInterface(CDAI).approve(address(bridge), CDAIBalance);
-        bridge.convert(inputAsset,inputAsset,inputAsset, inputAsset, inputValue, 0, auxData);
+    function testLendCDAI(uint x) public{
+        x = convertInput(x);
+        (NotionalLendingBridge bridge, ) = lendCDAI(x);
         address fcashToken = bridge.cashTokenFcashToken(CDAI);
         uint balance = FCashToken(fcashToken).balanceOf(address(this));
         require(balance > 0, "receive fcash for lending");
     }
 
-    function testWithdrawCDAIUnderMaturity() public {
-        NotionalLendingBridge bridge = new NotionalLendingBridge(address(this));
-        bridge.insertToken(IEIP20NonStandard(DAI),CTokenInterface(CDAI));
-        vm.deal(address(this), 10 ether);
-        Types.AztecAsset memory inputAsset;
-        // swap for CDai
-        address[] memory path = new address[](3);
-        path[0] = WETH;
-        path[1] = DAI;
-        path[2] = CDAI;
-        ROUTER.swapExactETHForTokens{value: 0.01 ether}(0, path, address(this), block.timestamp);
-        uint CDAIBalance = CTokenInterface(CDAI).balanceOf(address(this));
-        inputAsset.assetType = Types.AztecAssetType.ERC20;
-        inputAsset.erc20Address = CDAI;
-        uint inputValue = CDAIBalance;
-        uint64 auxData = (2 << 48) + (1 << 40);
-        CTokenInterface(CDAI).approve(address(bridge), CDAIBalance);
-        bridge.convert(inputAsset,inputAsset,inputAsset, inputAsset, inputValue, 0, auxData);
-        address fcashToken = bridge.cashTokenFcashToken(CDAI);
-        uint balance = FCashToken(fcashToken).balanceOf(address(this));
-        require(balance > 0, "receive fcash for lending");
-        inputAsset.assetType = Types.AztecAssetType.ERC20;
-        inputAsset.erc20Address = fcashToken;
-        inputValue = balance;
-        Types.AztecAsset memory outputAsset;
-        outputAsset.assetType = Types.AztecAssetType.ERC20;
-        outputAsset.erc20Address = address(CDAI);
-        FCashToken(fcashToken).approve(address(bridge), balance);
-        auxData = (2 << 48) + (1 << 40) + 1664064000;
+    function testWithdrawCDAIUnderMaturity(uint x) public {
+        x = convertInput(x);
+        (NotionalLendingBridge bridge, uint inputAmount) = lendCDAI(x);
         uint prevBalance = CTokenInterface(CDAI).balanceOf(address(this));
-        bridge.convert(inputAsset,inputAsset,outputAsset,outputAsset, inputValue, 0, auxData);
-        uint redeemedCDAI = CTokenInterface(CDAI).balanceOf(address(this)) - prevBalance;
-        // might lose some of the money because of the slippage.
-        require(redeemedCDAI *10000/CDAIBalance > 9900, "should take most of the money back");
-        require(FCashToken(fcashToken).balanceOf(address(this)) == 0, "fcash should be burned");
+        uint withdrawAmount = IEIP20NonStandard(bridge.cashTokenFcashToken(CDAI)).balanceOf(address(this));
+        withdrawCDAI(withdrawAmount, bridge, false);
+        uint redeemedBalance = CTokenInterface(CDAI).balanceOf(address(this)) - prevBalance;
+        require(redeemedBalance * 10000 / inputAmount > 9900, "should take most of money back");
+        require(IEIP20NonStandard(bridge.cashTokenFcashToken(CDAI)).balanceOf(address(this)) == 0,"fcash should be burned");
     }
 
-    function testWithdrawDAIOverMaturity() public {
-        NotionalLendingBridge bridge = new NotionalLendingBridge(address(this));
-        bridge.insertToken(IEIP20NonStandard(DAI),CTokenInterface(CDAI));
-        vm.deal(address(this), 10 ether);
-        Types.AztecAsset memory inputAsset;
-        // swap for CDai
-        address[] memory path = new address[](3);
-        path[0] = WETH;
-        path[1] = DAI;
-        path[2] = CDAI;
-        ROUTER.swapExactETHForTokens{value: 0.01 ether}(0, path, address(this), block.timestamp);
-        uint CDAIBalance = CTokenInterface(CDAI).balanceOf(address(this));
-        inputAsset.assetType = Types.AztecAssetType.ERC20;
-        inputAsset.erc20Address = CDAI;
-        uint inputValue = CDAIBalance;
-        uint64 auxData = (2 << 48) + (1 << 40);
-        CTokenInterface(CDAI).approve(address(bridge), CDAIBalance);
-        bridge.convert(inputAsset,inputAsset,inputAsset, inputAsset, inputValue, 0, auxData);
-        address fcashToken = bridge.cashTokenFcashToken(CDAI);
-        uint balance = FCashToken(fcashToken).balanceOf(address(this));
-        require(balance > 0, "receive fcash for lending");
-        inputAsset.assetType = Types.AztecAssetType.ERC20;
-        inputAsset.erc20Address = fcashToken;
-        inputValue = balance;
-        Types.AztecAsset memory outputAsset;
-        outputAsset.assetType = Types.AztecAssetType.ERC20;
-        outputAsset.erc20Address = CDAI;
-        FCashToken(fcashToken).approve(address(bridge), balance);
-        auxData = auxData + 1664064000;
+    function testWithdrawDAIOverMaturity(uint x) public {
+        x = convertInput(x);
+        (NotionalLendingBridge bridge, uint inputAmount) = lendCDAI(x);
+        uint prevBalance = CTokenInterface(CDAI).balanceOf(address(this));
+        uint withdrawAmount = IEIP20NonStandard(bridge.cashTokenFcashToken(CDAI)).balanceOf(address(this));
         vm.warp(1679616000);
-        uint prevBalance = CTokenInterface(CDAI).balanceOf(address(this));
-        bridge.convert(inputAsset,inputAsset,outputAsset,outputAsset, inputValue, 0, auxData);
-        uint redeemedCDAI = CTokenInterface(CDAI).balanceOf(address(this)) - prevBalance;
-        require(redeemedCDAI > CDAIBalance, "should incur interest");
-        require(FCashToken(fcashToken).balanceOf(address(this)) == 0, "fcash should be burned");
+        withdrawCDAI(withdrawAmount, bridge, false);
+        uint redeemedBalance = CTokenInterface(CDAI).balanceOf(address(this)) - prevBalance;
+        require(redeemedBalance  > inputAmount, "should incur interest");
+        require(IEIP20NonStandard(bridge.cashTokenFcashToken(CDAI)).balanceOf(address(this)) == 0,"fcash should be burned");
     }
 }

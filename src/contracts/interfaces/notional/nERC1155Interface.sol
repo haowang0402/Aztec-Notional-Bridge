@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
-import "../../contracts/global/NotionalTypes.sol";
+import "../NotionalTypes.sol";
 
 interface nERC1155Interface {
     event TransferSingle(

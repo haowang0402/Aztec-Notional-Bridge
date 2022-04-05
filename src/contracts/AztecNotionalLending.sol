@@ -141,7 +141,6 @@ contract NotionalLendingBridge is IDefiBridge {
             uint256(tradeData.marketIndex),
             block.timestamp);
         fCashAmt = fCashAmt * 99875/100000;
-        //bytes32 trade = encodeLendTrade(tradeData.marketIndex, uint88(uint256(fCashAmt)), tradeData.minImpliedRate);
         bytes32 trade = bytes32(uint256(tradeData.marketIndex) << 240 |  uint256(fCashAmt) << 152);
         action.trades = new bytes32[](1);
         action.trades[0] = trade;

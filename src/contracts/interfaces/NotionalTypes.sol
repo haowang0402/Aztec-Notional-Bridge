@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 import "./chainlink/AggregatorV2V3Interface.sol";
-import "./notional/AssetRateAdapter.sol";
+import "./Notional/AssetRateAdapter.sol";
 
 /// @notice Different types of internal tokens
 ///  - UnderlyingToken: underlying asset for a cToken (except for Ether)

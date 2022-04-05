@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
-import "../../contracts/global/NotionalTypes.sol";
+import "../NotionalTypes.sol";
 
 interface NotionalViews {
     function getMaxCurrencyId() external view returns (uint16);
